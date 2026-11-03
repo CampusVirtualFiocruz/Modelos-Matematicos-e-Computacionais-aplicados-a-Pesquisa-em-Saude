@@ -20,15 +20,19 @@
 # ------------------------------------------------------------------------------
 
 # Definir pasta de trabalho (ajuste para o seu caminho)
-  setwd("C:/Users/seu_usuario/modulo1")
+setwd("C:/Users/seu_usuario/modulo1")
 
 # Instalar pacotes (executar apenas uma vez)
-# install.packages("sparklyr")
+#install.packages("sparklyr")
 # install.packages("dplyr")
 # install.packages("arrow")
 
 # Instalar o Apache Spark (executar apenas uma vez após instalar sparklyr)
-# sparklyr::spark_install(version = "3.5")
+#sparklyr::spark_install(version = "3.5")
+
+#verificar spark instalado 
+#spark_installed_versions()
+
 
 # Carregar pacotes
 library(dplyr)
@@ -103,8 +107,8 @@ head(iris_parcial)
 # ELT é o processo que os profissionais do SUS já fazem — muitas vezes
 # manualmente no Excel — ao trabalhar com sistemas como SINAN, SIM, SINASC:
 #   Baixar dados de diferentes sistemas       → Extract
-#   Salvar em formato adequado para análise   → Load
-#   Limpar, padronizar, criar variáveis       → Transform
+#   Carregar/Salvar em formato adequado para análise   → Load
+#   Limpar, padronizar, criar variáveis(organizar os dados para responder uma pergunta)       → Transform
 #
 # Com sparklyr, esse fluxo pode ser automatizado e escalado para
 # milhões de registros.
@@ -113,7 +117,28 @@ head(iris_parcial)
 # Fonte: OpenDataSUS (DATASUS)
 
 # Iniciar conexão com o Spark (modo local: usa os núcleos da própria máquina)
-sc <- spark_connect(master = "local")
+
+# Criar uma configuração personalizada para o Spark
+# Aqui vamos informar ao Spark quanta memória ele pode usar
+# e como ele deve dividir algumas tarefas internamente
+conf <- spark_config()
+
+# Define a quantidade de memória disponível para o "motor principal" do Spark
+# Neste exemplo, estamos permitindo o uso de até 8 GB de memória
+conf$spark.driver.memory <- "3G"
+
+# Define a quantidade de memória disponível para executar as tarefas do Spark
+# No modo local, esse valor ajuda o Spark a trabalhar com arquivos maiores
+conf$spark.executor.memory <- "3G"
+
+# Define em quantas partes o Spark vai dividir algumas operações internas,
+# como agrupamentos, junções e ordenações
+
+conf$spark.sql.shuffle.partitions <- 4
+
+#spark_disconnect_all() # limpar a conexao do spark se for preciso reiniciar o processo
+
+sc <- spark_connect(master = "local",config = conf)
 
 # ------------------------------------------------------------------------------
 # TÓPICO 1: EXTRAÇÃO (Extract)
@@ -143,7 +168,7 @@ destino_csv <- "dados/SRAG_2021.csv"
 download.file(url = url_csv, destfile = destino_csv, method = "auto")
 
 # Carregar CSV no Spark (delimiter = ";" pois é padrão do DataSUS)
-df <- spark_read_csv(sc, path = destino_csv, delimiter = ";")
+df <- spark_read_csv(sc, path = destino_csv, delimiter = ";")  # esse arquivo é muito maior que a base de dados iris!
 
 # ------------------------------------------------------------------------------
 # TÓPICO 2: CARREGAMENTO (Load)
@@ -154,10 +179,10 @@ df <- spark_read_csv(sc, path = destino_csv, delimiter = ";")
 #   - Organizar em pastas por etapa: brutos/, processados/, analises/.
 
 # Salvar em formato Parquet (mais eficiente para grandes bases)
-spark_write_parquet(df, path = "dados/SRAG_2021_parquet")
+spark_write_parquet(df, path = "dados/SRAG_2021.parquet")
 
 # Ler arquivo Parquet
-df_parquet <- spark_read_parquet(sc, name = "dados_parquet", path = "dados/SRAG_2021_parquet")
+df_parquet <- spark_read_parquet(sc, name = "dados_parquet", path = "dados/SRAG_2021.parquet")
 
 # ------------------------------------------------------------------------------
 # TÓPICO 3: TRANSFORMAÇÃO (Transform)
@@ -212,19 +237,21 @@ df_agregado <- df_cura %>%
 
 df_agregado
 
+
+
+# MUTATE - Criar novas variáveis
+df_cura <- df_cura %>%
+  mutate(
+    FAIXA_ETARIA = if_else(NU_IDADE_N >= 18, "Maior Idade", "Menor Idade")
+  )
+
+df_cura %>% glimpse()
+
 # ARRANGE - Ordenar dados
 df_cura <- df_cura %>%
   arrange(SG_UF, NU_IDADE_N)
 
 df_cura
-
-# MUTATE - Criar novas variáveis
-df_cura <- df_cura %>%
-  mutate(
-    FAIXA_ETARIA = if_else(NU_IDADE_N > 18, "Maior Idade", "Menor Idade")
-  )
-
-df_cura %>% glimpse()
 
 # Salvar base processada em Parquet
 spark_write_parquet(df_cura, path = "dados/SRAG_2021_processado")

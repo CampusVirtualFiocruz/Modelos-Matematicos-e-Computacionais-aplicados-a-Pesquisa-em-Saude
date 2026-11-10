@@ -1,6 +1,10 @@
 # ==============================================================================
 # MÓDULO 1: INTRODUÇÃO A GRANDES BASES DE DADOS
 # Script Consolidado - Aulas 1 a 3
+# Execute a partir da raiz do repositório, de preferência por blocos.
+# Instale dplyr, sparklyr, arrow e Spark 3.5 uma única vez.
+# A Aula 3 requer Java, internet e 7 GB livres recomendados.
+# A base tem cerca de 1 GB; os resultados ficam em dados_didatico/.
 # ------------------------------------------------------------------------------
 # Curso: Modelos Matemáticos e Computacionais aplicados à Pesquisa em Saúde
 # Campus Virtual Fiocruz
@@ -19,8 +23,11 @@
 # CONFIGURAÇÃO INICIAL
 # ------------------------------------------------------------------------------
 
-# Definir pasta de trabalho (ajuste para o seu caminho)
-setwd("C:/Users/seu_usuario/modulo1")
+# Abra a raiz do repositório como diretório de trabalho.
+# OPCIONAL: para definir a pasta com setwd(), ajuste o caminho e execute a linha:
+# setwd("C:/caminho/para/a/pasta/do/repositorio")
+# Se o diretório de trabalho já for a raiz do repositório, não use setwd():
+# deixe a linha comentada e siga para a instalação dos pacotes.
 
 # Instalar pacotes (executar apenas uma vez)
 #install.packages("sparklyr")
@@ -30,8 +37,6 @@ setwd("C:/Users/seu_usuario/modulo1")
 # Instalar o Apache Spark (executar apenas uma vez após instalar sparklyr)
 #sparklyr::spark_install(version = "3.5")
 
-#verificar spark instalado 
-#spark_installed_versions()
 
 
 # Carregar pacotes
@@ -39,8 +44,9 @@ library(dplyr)
 library(sparklyr)
 library(arrow)
 
-# Criar pasta de dados (não sobrescreve se já existir)
-dir.create("dados", showWarnings = FALSE)
+# Criar uma pasta para os dados da prática.
+dados_dir <- "dados_didatico"
+dir.create(dados_dir, showWarnings = FALSE)
 
 
 # ==============================================================================
@@ -87,21 +93,24 @@ dir.create("dados", showWarnings = FALSE)
 
 # Demonstração da vantagem do Parquet frente ao CSV
 # (usando a base iris como dado de exemplo — não requer download)
-write.csv(iris, "dados/iris_demo.csv", row.names = FALSE)
-write_parquet(iris, "dados/iris_demo.parquet")
+message("Aula 2: iniciando demonstração com iris.")
+write.csv(iris, file.path(dados_dir, "iris_demo.csv"), row.names = FALSE)
+write_parquet(iris, file.path(dados_dir, "iris_demo.parquet"))
 
 # Comparação de tamanho (em bytes): em bases pequenas, como iris, o Parquet
 # pode não ser menor que o CSV.
-print(paste("Tamanho CSV:    ", file.size("dados/iris_demo.csv"), "bytes"))
-print(paste("Tamanho Parquet:", file.size("dados/iris_demo.parquet"), "bytes"))
-print(paste("Redução:        ", round((1 - file.size("dados/iris_demo.parquet") /
-                                           file.size("dados/iris_demo.csv")) * 100), "%"))
+print(paste("Tamanho CSV:    ", file.size(file.path(dados_dir, "iris_demo.csv")), "bytes"))
+print(paste("Tamanho Parquet:", file.size(file.path(dados_dir, "iris_demo.parquet")), "bytes"))
+print(paste("Redução:        ", round((1 - file.size(file.path(dados_dir, "iris_demo.parquet")) /
+                                           file.size(file.path(dados_dir, "iris_demo.csv"))) * 100), "%"))
 
 # Leitura parcial com Parquet: lê apenas as colunas de interesse
 # Em grandes bases, isso poupa memória e tempo significativamente
-iris_parcial <- read_parquet("dados/iris_demo.parquet",
+iris_parcial <- read_parquet(file.path(dados_dir, "iris_demo.parquet"),
                              col_select = c("Sepal.Length", "Species"))
-head(iris_parcial)
+print(head(iris_parcial))
+message("Aula 2: demonstração concluída. Arquivos em ", dados_dir, "/.")
+
 
 
 # ==============================================================================
@@ -118,6 +127,9 @@ head(iris_parcial)
 #
 # Base utilizada: SRAG 2021 — Síndrome Respiratória Aguda Grave
 # Fonte: OpenDataSUS (DATASUS)
+
+
+message("Aula 3: iniciando conexão Spark local.")
 
 # Iniciar conexão com o Spark (modo local: usa os núcleos da própria máquina)
 
@@ -140,6 +152,7 @@ conf$spark.executor.memory <- "3G"
 conf$spark.sql.shuffle.partitions <- 4
 
 #spark_disconnect_all() # limpar a conexao do spark se for preciso reiniciar o processo
+# Execute esta Aula 3 somente após preparar Spark 3.5 e Java.
 
 sc <- spark_connect(master = "local[*]", config = conf)
 
@@ -165,9 +178,11 @@ sc <- spark_connect(master = "local[*]", config = conf)
 
 # Definir URL e destino do arquivo
 url_csv     <- "https://s3.sa-east-1.amazonaws.com/ckan.saude.gov.br/SRAG/2021/INFLUD21-01-05-2023.csv"
-destino_csv <- "dados/SRAG_2021.csv"
+destino_csv <- file.path(dados_dir, "SRAG_2021.csv")
 
 # Baixar arquivo (pode demorar alguns minutos)
+# A base tem cerca de 1 GB; confirme internet e 7 GB livres.
+message("Aula 3: baixando a base SRAG (cerca de 1 GB); isso pode demorar.")
 download.file(url = url_csv, destfile = destino_csv, method = "auto")
 
 # Carregar CSV no Spark (delimiter = ";" pois é padrão do DataSUS)
@@ -181,16 +196,19 @@ df <- spark_read_csv(sc, path = destino_csv, delimiter = ";")  # esse arquivo é
 #   - Nomear arquivos com data de processamento.
 #   - Organizar em pastas por etapa: brutos/, processados/, analises/.
 
-# Salvar os dados em um diretório Parquet (o Spark cria arquivos de partes)
-# Se o diretório de destino já existir, esta chamada falha.
-# Para substituí-lo em uma nova execução, acrescente mode = "overwrite" aos argumentos.
-spark_write_parquet(df, path = "dados/SRAG_2021.parquet")
+# Salvar os dados em um diretório Parquet (o Spark cria arquivos de partes).
+# Se o destino já existir, a escrita falha. Para repetir a prática,
+# renomeie ou remova manualmente apenas dados_didatico/SRAG_2021.parquet.
+message("Aula 3: gravando o Parquet bruto.")
+spark_write_parquet(df, path = file.path(dados_dir, "SRAG_2021.parquet"))
+message("Aula 3: Parquet bruto gravado.")
 
 # Para ler uma pasta com vários arquivos Parquet, informe o caminho da pasta:
-# exemplo <- spark_read_parquet(sc, name = "exemplo", path = "dados/pasta_parquet")
+# exemplo <- spark_read_parquet(sc, name = "exemplo", path = file.path(dados_dir, "pasta_parquet"))
 
 # Ler o diretório Parquet gerado
-df_parquet <- spark_read_parquet(sc, name = "dados_parquet", path = "dados/SRAG_2021.parquet")
+df_parquet <- spark_read_parquet(sc, name = "dados_parquet",
+                                 path = file.path(dados_dir, "SRAG_2021.parquet"))
 
 # ------------------------------------------------------------------------------
 # TÓPICO 3: TRANSFORMAÇÃO (Transform)
@@ -203,14 +221,14 @@ df_parquet <- spark_read_parquet(sc, name = "dados_parquet", path = "dados/SRAG_
 #   5. Agregações    : contagem por município, taxas por 100.000 habitantes.
 
 # Visualizar primeiras linhas
-df_parquet %>% head()
+print(df_parquet %>% head())
 
 # Verificar dimensões
-sdf_nrow(df_parquet)
-length(colnames(df_parquet))
+print(sdf_nrow(df_parquet))
+print(length(colnames(df_parquet)))
 
 # Listar todas as colunas
-colnames(df_parquet)
+print(colnames(df_parquet))
 
 # SELECT - Selecionar colunas de interesse
 # EVOLUCAO: 1=Cura, 2=Óbito, 3=Óbito outras causas, 9=Ignorado
@@ -227,7 +245,7 @@ df_cura <- df_new %>%
 df_cura %>% glimpse()
 
 # Tratar valores nulos na variável UF
-df_cura %>% filter(is.na(SG_UF))
+print(df_cura %>% filter(is.na(SG_UF)))
 
 df_cura <- df_cura %>%
   filter(!is.na(SG_UF))
@@ -243,7 +261,7 @@ df_agregado <- df_cura %>%
     total_casos = n()
   )
 
-df_agregado
+print(df_agregado)
 
 
 
@@ -259,12 +277,14 @@ df_cura %>% glimpse()
 df_cura <- df_cura %>%
   arrange(SG_UF, NU_IDADE_N)
 
-df_cura
+print(df_cura)
 
-# Salvar a base processada em um diretório Parquet
-# Se o diretório de destino já existir, esta chamada falha.
-# Para substituí-lo em uma nova execução, acrescente mode = "overwrite" aos argumentos.
-spark_write_parquet(df_cura, path = "dados/SRAG_2021_processado")
+# Salvar a base processada em um diretório Parquet.
+# Se o destino já existir, a escrita falha. Para repetir a prática,
+# renomeie ou remova manualmente apenas dados_didatico/SRAG_2021_processado.
+message("Aula 3: gravando o Parquet processado.")
+spark_write_parquet(df_cura, path = file.path(dados_dir, "SRAG_2021_processado"))
+message("Aula 3: Parquet processado gravado.")
 
 
 # ------------------------------------------------------------------------------
@@ -273,6 +293,7 @@ spark_write_parquet(df_cura, path = "dados/SRAG_2021_processado")
 
 # Encerrar conexão com o Spark
 spark_disconnect(sc)
+message("Aula 3: conexão Spark encerrada.")
 
 
 # ==============================================================================

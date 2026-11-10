@@ -78,9 +78,11 @@ dir.create("dados", showWarnings = FALSE)
 #
 # Apache Parquet: formato de arquivo colunar, open-source.
 #   - Leitura parcial: acessa apenas as colunas necessárias (não lê tudo).
-#   - Alta compressão: arquivo até 90% menor que CSV equivalente.
+#   - Compressão eficiente em bases grandes e colunares; o ganho em relação ao
+#     CSV depende dos dados.
 #   - Preserva tipos de dados completamente (ao contrário do CSV).
-#   - Sem limite de linhas (CSV no Excel: ~1 milhão).
+#   - Não possui limite intrínseco de linhas; o limite de ~1 milhão de linhas
+#     é do Excel, não do CSV.
 #   - Requer ferramenta com suporte (R, Python, Spark) — não editável manualmente.
 
 # Demonstração da vantagem do Parquet frente ao CSV
@@ -88,7 +90,8 @@ dir.create("dados", showWarnings = FALSE)
 write.csv(iris, "dados/iris_demo.csv", row.names = FALSE)
 write_parquet(iris, "dados/iris_demo.parquet")
 
-# Comparação de tamanho (em bytes): Parquet é substancialmente menor
+# Comparação de tamanho (em bytes): em bases pequenas, como iris, o Parquet
+# pode não ser menor que o CSV.
 print(paste("Tamanho CSV:    ", file.size("dados/iris_demo.csv"), "bytes"))
 print(paste("Tamanho Parquet:", file.size("dados/iris_demo.parquet"), "bytes"))
 print(paste("Redução:        ", round((1 - file.size("dados/iris_demo.parquet") /
@@ -124,7 +127,7 @@ head(iris_parcial)
 conf <- spark_config()
 
 # Define a quantidade de memória disponível para o "motor principal" do Spark
-# Neste exemplo, estamos permitindo o uso de até 8 GB de memória
+# Neste exemplo, estamos permitindo o uso de até 3 GB de memória para o driver.
 conf$spark.driver.memory <- "3G"
 
 # Define a quantidade de memória disponível para executar as tarefas do Spark
@@ -138,7 +141,7 @@ conf$spark.sql.shuffle.partitions <- 4
 
 #spark_disconnect_all() # limpar a conexao do spark se for preciso reiniciar o processo
 
-sc <- spark_connect(master = "local",config = conf)
+sc <- spark_connect(master = "local[*]", config = conf)
 
 # ------------------------------------------------------------------------------
 # TÓPICO 1: EXTRAÇÃO (Extract)
@@ -178,10 +181,15 @@ df <- spark_read_csv(sc, path = destino_csv, delimiter = ";")  # esse arquivo é
 #   - Nomear arquivos com data de processamento.
 #   - Organizar em pastas por etapa: brutos/, processados/, analises/.
 
-# Salvar em formato Parquet (mais eficiente para grandes bases)
+# Salvar os dados em um diretório Parquet (o Spark cria arquivos de partes)
+# Se o diretório de destino já existir, esta chamada falha.
+# Para substituí-lo em uma nova execução, acrescente mode = "overwrite" aos argumentos.
 spark_write_parquet(df, path = "dados/SRAG_2021.parquet")
 
-# Ler arquivo Parquet
+# Para ler uma pasta com vários arquivos Parquet, informe o caminho da pasta:
+# exemplo <- spark_read_parquet(sc, name = "exemplo", path = "dados/pasta_parquet")
+
+# Ler o diretório Parquet gerado
 df_parquet <- spark_read_parquet(sc, name = "dados_parquet", path = "dados/SRAG_2021.parquet")
 
 # ------------------------------------------------------------------------------
@@ -253,7 +261,9 @@ df_cura <- df_cura %>%
 
 df_cura
 
-# Salvar base processada em Parquet
+# Salvar a base processada em um diretório Parquet
+# Se o diretório de destino já existir, esta chamada falha.
+# Para substituí-lo em uma nova execução, acrescente mode = "overwrite" aos argumentos.
 spark_write_parquet(df_cura, path = "dados/SRAG_2021_processado")
 
 

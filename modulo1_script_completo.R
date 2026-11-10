@@ -251,13 +251,14 @@ df_cura <- df_cura %>%
   filter(!is.na(SG_UF))
 
 # GROUP_BY + SUMMARISE - Agregar dados por UF
+# As estatísticas ignoram idades ausentes; total_casos conta todos os registros filtrados.
 df_agregado <- df_cura %>%
   group_by(SG_UF) %>%
   summarise(
-    soma_idade  = sum(NU_IDADE_N),
-    media_idade = mean(NU_IDADE_N),
-    idade_min   = min(NU_IDADE_N),
-    idade_max   = max(NU_IDADE_N),
+    soma_idade  = sum(NU_IDADE_N, na.rm = TRUE),
+    media_idade = mean(NU_IDADE_N, na.rm = TRUE),
+    idade_min   = min(NU_IDADE_N, na.rm = TRUE),
+    idade_max   = max(NU_IDADE_N, na.rm = TRUE),
     total_casos = n()
   )
 

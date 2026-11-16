@@ -51,7 +51,7 @@ library(fossil)       # Índice Rand
 # implementadas e analisadas com auxílio de recursos computacionais.
 #
 # Aprendizado de máquina: subcampo da IA em que computadores aprendem padrões
-# a partir de dados, melhorando o desempenho conforme recebem mais informações.
+# a partir de dados para realizar tarefas, como classificação e predição.
 #
 # Dois riscos centrais ao treinar modelos:
 #   Underfitting: o modelo não captura os padrões dos dados de treinamento.
@@ -77,7 +77,9 @@ library(fossil)       # Índice Rand
 # TÓPICO 1: DIVISÃO DOS DADOS
 # ------------------------------------------------------------------------------
 # Convenção comum: 70% treinamento e 30% teste.
-# A divisão preserva a proporção de classes com set.seed para reprodutibilidade.
+# createDataPartition realiza a divisão estratificada, preservando
+# aproximadamente as proporções das classes.
+# set.seed garante a reprodutibilidade da divisão.
 
 data(iris)
 
@@ -102,14 +104,19 @@ prop.table(table(y_teste))    # proporção de cada classe no teste
 # ------------------------------------------------------------------------------
 
 # --- k-NN (K-Nearest Neighbors) -----------------------------------------------
-# Classifica cada objeto com base nos k vizinhos mais próximos (distância
-# euclidiana). k ímpar evita empates; k = 5 é um valor inicial razoável.
+# Classifica cada objeto com base nos k vizinhos mais próximos (distância euclidiana). 
+# k ímpar reduz a possibilidade de empates;
+# k = 5 é um valor inicial razoável.
+
+# Atenção: como o k-NN utiliza distâncias, variáveis com escalas maiores
+# podem influenciar mais o resultado. Por isso, geralmente recomenda-se
+# padronizar os dados antes de aplicar o algoritmo.
 
 pred_knn <- knn(train = X_treino, test = X_teste, cl = y_treino, k = 5)
 
 # --- Naive Bayes ---------------------------------------------------------------
 # Classificador probabilístico baseado no teorema de Bayes.
-# Assume independência entre as variáveis preditoras.
+# Assume independência condicional entre as variáveis preditoras, dada a classe.
 
 mod_nb   <- naiveBayes(Species ~ ., data = treino)
 pred_nb  <- predict(mod_nb, X_teste)
@@ -142,7 +149,8 @@ pred_svm <- predict(mod_svm, X_teste)
 #   Recall    : dos reais positivos, quantos o modelo identificou corretamente?
 #   F1-score  : média harmônica entre precisão e recall.
 #
-# A matriz de confusão organiza TP, TN, FP e FN para cada par real × predito.
+# A matriz de confusão organiza as classificações reais e preditas,
+# permitindo identificar acertos e erros para cada classe.
 
 avaliar_modelo <- function(real, pred, nome_modelo) {
   cm  <- confusionMatrix(pred, real)
@@ -161,7 +169,7 @@ avaliar_modelo(y_teste, pred_nb,     "Naive Bayes")
 avaliar_modelo(y_teste, pred_arvore, "Árvore de Decisão")
 avaliar_modelo(y_teste, pred_svm,    "SVM")
 
-# Atenção: valores muito elevados em todas as métricas podem indicar overfitting.
+# Atenção: desempenho muito superior no treinamento em relação ao teste pode indicar overfitting.
 # Em saúde, é fundamental equilibrar precisão e recall conforme o custo de
 # falsos positivos e falsos negativos no contexto clínico.
 
@@ -184,7 +192,8 @@ predict(mod_nb,     nova_amostra)          # Naive Bayes
 predict(mod_arvore, nova_amostra, type = "class")  # Árvore de decisão
 predict(mod_svm,    nova_amostra)          # SVM
 
-# k-NN requer que o novo dado passe pelo mesmo conjunto de treino
+# k-NN utiliza os dados de treinamento para identificar os vizinhos
+# mais próximos da nova amostra.
 knn(train = X_treino, test = nova_amostra, cl = y_treino, k = 5)
 
 
@@ -195,9 +204,9 @@ knn(train = X_treino, test = nova_amostra, cl = y_treino, k = 5)
 # categorias discretas). Amplamente usada em séries temporais e predição
 # de variáveis numéricas.
 #
-# Base de dados: Boston (506 imóveis, 14 variáveis)
-#   Variável de saída: medv (valor médio de imóveis — em USD mil)
-#   Variáveis preditoras: características socioeconômicas e estruturais
+# Base de dados: Boston (506 observações, 14 variáveis)
+#   Variável de saída: medv (valor mediano das residências, em USD mil)
+#   Variáveis preditoras: características socioeconômicas e habitacionais
 
 data(Boston)
 
@@ -206,13 +215,13 @@ idx_reg    <- createDataPartition(Boston$medv, p = 0.7, list = FALSE)
 treino_reg <- Boston[ idx_reg, ]
 teste_reg  <- Boston[-idx_reg, ]
 
-# Regressão linear simples: medv ~ lstat (% de população de baixa renda)
+# Regressão linear simples: medv ~ lstat (% de população de menor status socioeconômico)
 mod_rl_simples <- lm(medv ~ lstat, data = treino_reg)
 summary(mod_rl_simples)
 
 # Visualização do ajuste
 plot(treino_reg$lstat, treino_reg$medv,
-     xlab = "% população baixa renda (lstat)",
+     xlab = "% população de menor status socioeconômico (lstat)",
      ylab = "Valor do imóvel (medv)",
      main = "Regressão Linear Simples — Base Boston",
      pch = 16, col = "steelblue")
@@ -230,14 +239,15 @@ rpart.plot(mod_arvore_reg, main = "Árvore de Regressão — Base Boston")
 # ------------------------------------------------------------------------------
 # TÓPICO 1: AVALIAÇÃO DOS MODELOS DE REGRESSÃO
 # ------------------------------------------------------------------------------
-# Métricas de regressão medem a distância numérica entre valores preditos e reais.
-#   R²  : proporção da variância explicada pelo modelo (0 = nada, 1 = tudo).
-#         Valores elevados devem ser analisados com cautela (risco de overfitting).
+# Métricas de regressão avaliam a qualidade das previsões, comparando os valores preditos com os valores reais.
+#   R²  : mede o desempenho do modelo em relação à previsão pela média
+#         dos valores reais (1 = perfeito; 0 = equivalente à média;
+#         valores negativos = pior que a média).
 #   MAE : média das distâncias absolutas entre predito e real (mesma escala da variável).
 #   MSE : média dos quadrados dos erros; penaliza mais os erros grandes.
 
 avaliar_regressao <- function(real, pred, nome_modelo) {
-  r2  <- cor(real, pred)^2
+  r2  <- 1 - sum((real - pred)^2) / sum((real - mean(real))^2)
   mae <- mean(abs(real - pred))
   mse <- mean((real - pred)^2)
   cat("===", nome_modelo, "===\n")
@@ -272,21 +282,30 @@ abline(0, 1, col = "tomato", lwd = 2)   # linha de referência: predito = real
 # Dados simulados: pacientes com doenças crônicas
 #   X: número de consultas na atenção básica nos últimos 12 meses
 #   Y: número de internações no mesmo período
-# Três perfis esperados: bem acompanhados, em risco, estáveis.
+# Três perfis simulados: bem acompanhados, em risco, estáveis.
+# Os perfis são ilustrativos e não representam diagnósticos clínicos.
 
 set.seed(42)
-perfil_1 <- data.frame(consultas = rnorm(50, mean = 10, sd = 1.5),
-                        internacoes = rnorm(50, mean = 1,  sd = 0.5))   # bem acompanhados
-perfil_2 <- data.frame(consultas = rnorm(50, mean = 2,  sd = 1.0),
-                        internacoes = rnorm(50, mean = 6,  sd = 1.0))   # em risco
-perfil_3 <- data.frame(consultas = rnorm(50, mean = 3,  sd = 1.0),
-                        internacoes = rnorm(50, mean = 1,  sd = 0.5))   # estáveis
+perfil_1 <- data.frame(
+  consultas   = pmax(0, round(rnorm(50, mean = 10, sd = 1.5))),
+  internacoes = pmax(0, round(rnorm(50, mean = 1, sd = 0.5)))
+)  # bem acompanhados
+
+perfil_2 <- data.frame(
+  consultas   = pmax(0, round(rnorm(50, mean = 2, sd = 1.0))),
+  internacoes = pmax(0, round(rnorm(50, mean = 6, sd = 1.0)))
+)  # em risco
+
+perfil_3 <- data.frame(
+  consultas   = pmax(0, round(rnorm(50, mean = 3, sd = 1.0))),
+  internacoes = pmax(0, round(rnorm(50, mean = 1, sd = 0.5)))
+)  # estáveis
 
 pacientes        <- rbind(perfil_1, perfil_2, perfil_3)
 rotulos_reais    <- factor(rep(c("Bem acompanhado", "Em risco", "Estável"), each = 50))
 
-# Padronização: necessária para que as escalas das variáveis não distorçam
-# a medida de distância usada pelos algoritmos
+# Padronização: evita que diferenças de escala entre as variáveis
+# influenciem excessivamente as medidas de distância.
 pacientes_scaled <- scale(pacientes)
 
 
@@ -329,10 +348,15 @@ mod_hier    <- hclust(dist_matrix, method = "average")   # average linkage
 # Dendrograma com corte em 3 grupos
 dend <- as.dendrogram(mod_hier)
 dend <- color_branches(dend, k = 3)
+
 plot(dend,
-     main  = "Dendrograma — Agrupamento Hierárquico (average linkage)",
-     ylab  = "Distância", leaflab = "none")
-abline(h = 3.5, col = "red", lty = 2)   # linha de corte ilustrativa
+     main = "Dendrograma — Agrupamento Hierárquico (average linkage)",
+     ylab = "Distância", leaflab = "none")
+
+# Linha de corte correspondente a 3 clusters
+n <- length(mod_hier$height)
+altura_corte <- mean(mod_hier$height[c(n - 2, n - 1)])
+abline(h = altura_corte, col = "red", lty = 2)
 
 # Definindo os clusters pelo corte
 clusters_hier <- cutree(mod_hier, k = 3)
@@ -343,7 +367,8 @@ clusters_hier <- cutree(mod_hier, k = 3)
 # Identifica automaticamente ruídos (objetos que não pertencem a nenhum cluster).
 # Parâmetros:
 #   eps    : raio de vizinhança para definir regiões densas
-#   minPts : número mínimo de objetos para formar um ponto central
+#   minPts : número mínimo de pontos na vizinhança, incluindo o próprio
+#            ponto, para que ele seja considerado um ponto central
 
 mod_dbscan <- dbscan(pacientes_scaled, eps = 0.5, minPts = 4)
 
